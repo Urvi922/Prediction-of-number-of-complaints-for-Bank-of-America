@@ -1,0 +1,96 @@
+---
+title: "Individual Assignment 3"
+output: pdf
+---
+**Data**  
+Dataset "Complaints" is used from official website of Consumer Financial Protection Bureau,United States Government.Complaint data for various companies of United States are available on the website, from which data for Bank of America was filtered and downloaded to be used for this assignment. The dataset used consist of 99,160 observations and 18 features(For feature description refer Part 1 Appendix). Out of 18, 17 features are of character type and 1 feature "Complaint ID" is integer type in the dataset.  
+From the 18 features, only 2 feature Date.Received and Product were selected for predicting the number of complaints to be received by Bank Of America in year 2022.Feature description is as follows:    
+1. Date.Received: Date of complaint received from year 2011 to 2021  
+2. Product: Product category of Bank of America in which the complaint falls   
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.align = "center")
+library(ggplot2)
+library(tidyverse)
+library(dbplyr)
+library(ggpubr)
+library(plyr)
+library(car)
+library(ggiraphExtra)
+library(zoo)
+```
+```{r reading dataset, include=FALSE}
+df <- read.csv("complaints-2021-03-14_17_15.csv")
+glimpse(df)
+```
+**Planning**  
+Because total number of complaint received in year 2022 by Bank of America is to be predicted, feature date received is used for further calculation and analysis.I created dataset with 2 features  "number of complaints" and "yearmonth" from the selected feature date received.For year 2011 only December month data is available and for year 2021 data for months January, February and March, so these values were dropped as we need to observe the year round trend in complaints for predicting the number of complaints to be received in year 2022.The below graph shows the number of complaints received by Bank of America per month from year 2012 to 2020.
+```{r selecting features, echo=FALSE}
+
+df1 <- df %>% dplyr::select(Date.received,Product) %>%  transmute(Date.received=as.Date(Date.received, format="%m/%d/%y"),Product) %>%  mutate(yearmonth=format(Date.received,"%y%m")) 
+
+df1['yearmonth'] <- type.convert(as.integer(df1$year))
+df1<-df1 %>% arrange(Date.received)
+```
+```{r data filtering,echo=FALSE,fig.width = 9, fig.height = 2}
+df2<- df1 %>% count('yearmonth')
+df3<- subset(df2, yearmonth!="1112")
+df4<- subset(df3, yearmonth!="2101")
+df5<- subset(df4, yearmonth!="2102")
+df6<- subset(df5, yearmonth!="2103")
+
+df7<- dplyr::rename(df6, c("complaints" = "freq"))
+
+plot2 <- ggplot(df7, aes(x=as.factor(yearmonth),y=complaints,fill=as.factor(yearmonth))) + geom_bar(stat = 'identity',show.legend =FALSE)+ labs(x = "Year Month", y = "Complaints", title = "Complaints per Month per Year")+theme(axis.text.x = element_text(angle = 90, hjust = 1))
+plot2
+
+```
+Before conducting linear regression on the data we need to check the assumptions of linear regression.  
+**1.** **All predictor variables must be quantitative or categorical, and outcome variable must be quantitative, continuous, and unbounded.**The predictor variable "year" is categorical and outcome variable "number of complains/month per year" is quantitative.     
+**2.** **Variance should be non -zero:** The test shows that variance of data is non-zero(For output of variance refer Part 2 Appendix).
+```{r asummption checking,include=FALSE}
+# non zero variance checking
+vars<-apply(df7, 2, var)
+vars
+```
+**3.** **No perfect multicollinearity:** There's only one predictor variable, so no need to check for multicollinearity.    
+**4.** **Predictors are uncorrelated with external variables:**It is assumed there aren't any external variables.  
+There are few assumptions that should to be satisfied by residuals, which we will check after conducting linear regression.
+
+**Analysis**  
+The coefficients(For Linear regression results refer  Part 3 Appendix) obtained after applying linear regression corresponds to formula $\texttt{complaints}_i = \beta_0 + \beta_{\texttt{yearmonth}} \texttt{yearmonth}_i + \epsilon_i$. Where 'intercept' value 2194.65 is beta0 and 'yearmonth' value -0.81 is beta(yearmonth).
+```{r linear regression,include=FALSE}
+model1 <- lm(complaints~yearmonth, data=df7)
+model1
+```
+The summary (For summary of model refer Part 4 Appendix) of the model gives various parameters from which we can interpret the performance of the model.   
+**1.** **The R_ squared value**(0.3997),which is 39.97%, indicates month and year account for 39.97% of variation in complaints received.In other words, if we are trying to explain why some product has more complaints than others, we can look at the complaints obtained by Bank of America for each product.   
+**2.** **F-statistic(70.57)**, which is significant with p value <0.001. Which means there is less than 0.1% chance that model would have performed better if mean value would have been used to predict the outcome.
+Therefore, we can conclude that our regression model results in significantly better prediction. 
+```{r summary, include=FALSE}
+summary(model1)
+```
+Now, let's check the assumptions of the model to be satisfied based on the residuals.Below are assumptions to residuals to be satisfied:
+**1.** **The Durbin Watson test**(For results of Durbin watson test refer Part 5 Appendix) gives the value of d = 0.551 with p=0 showing that the result is significant, which means that first order correlation exist.In our case the autocorrealtion is due to time series variable month and year, indicating that system depends in prior data.It adds degrees of uncertainty, which means that we can predict the future values well but 100% accuracy can't be achieve.Since, I need to apply simple linear regression in the model this is the most I can do in this assignment.    
+**2.** **Residuals are homoscedastic (constant variance):** From the residual vs fitted graph below it can be concluded that the residuals are follows homoscedasticity and linearity.     
+**3.** **Normal:** The QQ plot indicates that residuals follow normality.  
+```{r test, include=FALSE}
+durbinWatsonTest(model1)
+```
+```{r residuals, echo=FALSE,warning=FALSE,message=FALSE,fig.width = 7, fig.height = 2.5}
+op=par(mfrow=c(1,2))
+for(i in 1:2)plot(model1, which=i)
+par(op)
+
+```
+```{r graph ,echo=FALSE,fig.width = 8, fig.height = 2}
+ggPredict(model1, se=TRUE)
+```
+
+```{r prediction,include=FALSE}
+values=tibble(yearmonth=c(2201,2201,2203,2204,2205,2206,2207,2208,2209,2210,2211,2212))
+predicts<-predict.lm(model1, values)
+sum (predicts)
+```
+**Conclusion**   
+The above graph shows that there is decrease in the number of complaints received by Bank of America over the years.  
+From all the above assumptions it can be concluded that we have a model which is significantly useful.But there is one exception of auto correlation between variables due to use of time series, which can be further analyzed using time series analysis.Thus, it can be concluded with certain degree of confidence that the total number of complaints to be received in year 2022 by Bank Of America is 4890 approximately(For result of prediction refer Part 6 Appendix).
